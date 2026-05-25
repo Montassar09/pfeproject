@@ -31,7 +31,7 @@ const LoginPage = () => {
     const user = await login(email, mdp);
     const params = new URLSearchParams(location.search);
     const redirect = params.get('redirect');
-    navigate(redirect || DASHBOARDS[user.role] || '/login');
+    navigate((redirect && redirect !== '/login') ? redirect : (DASHBOARDS[user.role] || '/login'));
   } catch (err) {
     setErreur(err.response?.data?.message || 'Erreur de connexion.');
   } finally {

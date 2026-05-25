@@ -664,7 +664,7 @@ const getInterventionsPlanifieesParEquipement = async (req, res) => {
 // ── CRUD Operations for Interventions Staging ─────────────────────
 const addInterventionStaging = async (req, res) => {
   try {
-    const { date_intervention, heure, action, type_intervention, description, technicien, equipement, intervention_id } = req.body;
+    const { date_intervention, heure, action, type_intervention, description, technicien, equipement, intervention_id, sous_equipement } = req.body;
 
     if (!date_intervention || !type_intervention || !technicien) {
       return res.status(400).json({ message: 'Date, type et technicien sont requis.' });
@@ -672,9 +672,9 @@ const addInterventionStaging = async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO interventions_staging
-         (date_intervention, heure, action, type_intervention, description, technicien, equipement, intervention_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [date_intervention, heure || null, action || 'Ouverture', type_intervention, description || '', technicien, equipement || null, intervention_id || null]
+         (date_intervention, heure, action, type_intervention, description, technicien, equipement, intervention_id, sous_equipement)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [date_intervention, heure || null, action || 'Ouverture', type_intervention, description || '', technicien, equipement || null, intervention_id || null, sous_equipement || null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -716,8 +716,9 @@ const validerInterventionStaging = async (req, res) => {
     } else {
       // Curatif / libre : créer une entrée dans interventions
       const descParts = [
-        s.heure       ? `Heure: ${s.heure}`             : null,
-        s.equipement  ? `Equipement: ${s.equipement}`   : null,
+        s.heure            ? `Heure: ${s.heure}`                       : null,
+        s.equipement       ? `Equipement: ${s.equipement}`             : null,
+        s.sous_equipement  ? `Sous-equipement: ${s.sous_equipement}`   : null,
         `Technicien: ${s.technicien}`,
         s.description ? `Observations: ${s.description}` : null,
         estClotureee && s.heure_cloture ? `Cloture: ${s.heure_cloture}` : null,

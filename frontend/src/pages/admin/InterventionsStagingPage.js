@@ -141,6 +141,7 @@ const InterventionsStagingPage = () => {
               <tr style={styles.thead}>
                 <th style={styles.th}>Technicien</th>
                 <th style={styles.th}>Équipement</th>
+                <th style={styles.th}>Sous-équipement</th>
                 <th style={styles.th}>Type</th>
                 <th style={styles.th}>🔓 Ouverture</th>
                 <th style={styles.th}>🔒 Clôture</th>
@@ -171,6 +172,11 @@ const InterventionsStagingPage = () => {
                     </td>
                     <td style={styles.td}>
                       {row.equipement || <span style={styles.na}>—</span>}
+                    </td>
+                    <td style={styles.td}>
+                      {row.sous_equipement
+                        ? <span style={styles.badgeSousEquip}>{row.sous_equipement}</span>
+                        : <span style={styles.na}>—</span>}
                     </td>
                     <td style={styles.td}>
                       <span style={row.type_intervention === 'Preventive' ? styles.badgePreventif : styles.badgeCuratif}>
@@ -295,6 +301,7 @@ const styles = {
     fontSize: 12, fontWeight: 700, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a',
   },
   badge: { display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700 },
+  badgeSousEquip: { display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe' },
   badgePreventif: { display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' },
   badgeCuratif:   { display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, background: '#fff7ed', color: '#c2410c', border: '1px solid #fed7aa' },
   badgeLiee: { display: 'inline-block', padding: '2px 7px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0' },

@@ -1,10 +1,10 @@
 // ============================================================
 // SCAN INTERVENTION PAGE
-// Flux : login → sélection → form (ouverture) ou clôture
+// Flux : login → sous-équipement (si applicable) → sélection → form (ouverture) ou clôture
 // ============================================================
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { equipementsAPI, monitoringAPI } from '../../api';
+import { equipementsAPI, monitoringAPI, sousEquipAPI } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 
 const today   = new Date().toISOString().split('T')[0];
@@ -32,9 +32,13 @@ const ScanInterventionPage = () => {
   const [loginErreur, setLoginErreur]   = useState('');
 
   // ── Étape 2 : données ─────────────────────────────────────
-  const [equipement, setEquipement]   = useState(null);
-  const [planifiees, setPlanifiees]   = useState([]);
-  const [ouvertes, setOuvertes]       = useState([]);   // staging records ouverts (non clôturés)
+  const [equipement, setEquipement]     = useState(null);
+  const [sousEquipements, setSousEquipements] = useState([]);
+  const [planifiees, setPlanifiees]     = useState([]);
+  const [ouvertes, setOuvertes]         = useState([]);
+
+  // ── Sous-équipement sélectionné ───────────────────────────
+  const [selectedSousEquip, setSelectedSousEquip] = useState(null);
 
   // ── Étape 3 : form ouverture ──────────────────────────────
   const [selectedIntervention, setSelected] = useState(null);
@@ -49,9 +53,10 @@ const ScanInterventionPage = () => {
 
   const [saving, setSaving]   = useState(false);
   const [erreur, setErreur]   = useState('');
-  const [etape, setEtape]     = useState('login'); // login | selection | form | cloture | succes
+  // login | sous-equip | selection | form | cloture | succes
+  const [etape, setEtape]     = useState('login');
 
-  const isLoggedIn   = !!user;
+  const isLoggedIn    = !!user;
   const technicienNom = `${user?.prenom || ''} ${user?.nom || ''}`.trim();
 
   // Charger après login
@@ -59,19 +64,22 @@ const ScanInterventionPage = () => {
     if (!isLoggedIn) return;
     const charger = async () => {
       try {
-        const [equipRes, planRes, ouvertesRes] = await Promise.all([
+        const [equipRes, planRes, ouvertesRes, sousEquipRes] = await Promise.all([
           equipementsAPI.getById(equipementId),
           monitoringAPI.getInterventionsPlanifieesParEquipement(equipementId),
           monitoringAPI.getMesOuvertesStaging(technicienNom, null),
+          sousEquipAPI.getByEquipement(equipementId),
         ]);
         setEquipement(equipRes.data);
         setPlanifiees(planRes.data || []);
-        // Filtrer les ouvertes pour cet équipement (par nom)
         const equipNom = equipRes.data?.nom || '';
         setOuvertes((ouvertesRes.data || []).filter(o =>
           !o.equipement || o.equipement.toLowerCase() === equipNom.toLowerCase()
         ));
-        setEtape('selection');
+        const sous = sousEquipRes.data || [];
+        setSousEquipements(sous);
+        // S'il y a des sous-équipements → étape de sélection du sous-équipement
+        setEtape(sous.length > 0 ? 'sous-equip' : 'selection');
       } catch {
         setErreur('Impossible de charger les données.');
         setEtape('selection');
@@ -94,6 +102,12 @@ const ScanInterventionPage = () => {
     } finally {
       setLoginLoading(false);
     }
+  };
+
+  // ── Sélection sous-équipement ─────────────────────────────
+  const choisirSousEquip = (se) => {
+    setSelectedSousEquip(se);
+    setEtape('selection');
   };
 
   // ── Sélection intervention planifiée → form ouverture ─────
@@ -135,6 +149,7 @@ const ScanInterventionPage = () => {
         description:       description.trim(),
         technicien:        technicienNom,
         equipement:        equipement?.nom || null,
+        sous_equipement:   selectedSousEquip?.nom || null,
         intervention_id:   selectedIntervention?.id || null,
       });
       setEtape('succes');
@@ -169,6 +184,7 @@ const ScanInterventionPage = () => {
     setEtape('login');
     setSelected(null);
     setSelectedOuvert(null);
+    setSelectedSousEquip(null);
     setModeLibre(false);
     setDescription('');
     setDescCloture('');
@@ -201,6 +217,53 @@ const ScanInterventionPage = () => {
     );
   }
 
+  // ── SÉLECTION SOUS-ÉQUIPEMENT ─────────────────────────────
+  if (etape === 'sous-equip') {
+    return (
+      <div style={s.page}>
+        <div style={s.card}>
+          <p style={s.kicker}>ELEONETECH</p>
+          <h1 style={s.title}>Sous-équipement</h1>
+          {equipement && (
+            <div style={s.equipBadge}>
+              <span style={s.equipId}>#{equipement.id}</span>
+              <span style={s.equipNom}>{equipement.nom}</span>
+            </div>
+          )}
+          <p style={s.sectionTitle}>Sélectionnez le sous-équipement concerné :</p>
+          {sousEquipements.map(se => (
+            <button key={se.id} type="button" onClick={() => choisirSousEquip(se)} style={s.sousEquipCard}>
+              <div style={s.sousEquipRow}>
+                <div>
+                  <div style={s.sousEquipNom}>{se.nom}</div>
+                  {se.statut && (
+                    <div style={{
+                      ...s.sousEquipStatut,
+                      color: se.statut === 'actif' ? '#15803d'
+                           : se.statut === 'en_panne' ? '#b91c1c'
+                           : se.statut === 'en_maintenance' ? '#b45309'
+                           : '#64748b',
+                    }}>
+                      {se.statut === 'actif' ? '● Actif'
+                       : se.statut === 'en_panne' ? '● En panne'
+                       : se.statut === 'en_maintenance' ? '● En maintenance'
+                       : '● Hors service'}
+                    </div>
+                  )}
+                </div>
+                <span style={s.sousEquipArrow}>→</span>
+              </div>
+            </button>
+          ))}
+          <div style={s.divider}><span>ou</span></div>
+          <button type="button" onClick={() => choisirSousEquip(null)} style={s.btnSecondary}>
+            Équipement principal (sans sous-équipement)
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── SÉLECTION ─────────────────────────────────────────────
   if (etape === 'selection') {
     return (
@@ -214,6 +277,20 @@ const ScanInterventionPage = () => {
               <span style={s.equipNom}>{equipement.nom}</span>
             </div>
           )}
+
+          {/* Badge sous-équipement sélectionné */}
+          {selectedSousEquip && (
+            <div style={s.sousEquipSelectedBadge}>
+              <span style={s.sousEquipSelectedLabel}>Sous-équipement :</span>
+              <span style={s.sousEquipSelectedNom}>{selectedSousEquip.nom}</span>
+              {sousEquipements.length > 0 && (
+                <button type="button" onClick={() => setEtape('sous-equip')} style={s.changeSousEquipBtn}>
+                  Changer
+                </button>
+              )}
+            </div>
+          )}
+
           {erreur && <div style={s.errorBox}>{erreur}</div>}
 
           {/* Interventions en cours (ouvertes, non clôturées) */}
@@ -226,6 +303,7 @@ const ScanInterventionPage = () => {
                     <div>
                       <span style={s.badgeEnCours}>⚡ En cours</span>
                       <div style={s.planDate}>Ouverte le {formatDateShort(o.date_intervention)} à {o.heure || '—'}</div>
+                      {o.sous_equipement && <div style={s.planSousEquip}>🔩 {o.sous_equipement}</div>}
                       <div style={s.planTaches}>{o.type_intervention} — {o.description || 'sans description'}</div>
                     </div>
                     <span style={{ ...s.planAction, color: '#b45309' }}>🔒 Clôturer →</span>
@@ -293,6 +371,13 @@ const ScanInterventionPage = () => {
             </div>
           )}
 
+          {selectedOuvert?.sous_equipement && (
+            <div style={s.sousEquipSelectedBadge}>
+              <span style={s.sousEquipSelectedLabel}>Sous-équipement :</span>
+              <span style={s.sousEquipSelectedNom}>{selectedOuvert.sous_equipement}</span>
+            </div>
+          )}
+
           {/* Résumé de l'ouverture */}
           <div style={s.ouvertureBox}>
             <p style={s.ouvertureLabel}>🔓 Ouverture</p>
@@ -333,7 +418,6 @@ const ScanInterventionPage = () => {
 
   // ── SUCCÈS ────────────────────────────────────────────────
   if (etape === 'succes') {
-    const isCloture = etape === 'succes' && selectedOuvert;
     return (
       <div style={s.page}>
         <div style={{ ...s.card, textAlign: 'center' }}>
@@ -345,6 +429,12 @@ const ScanInterventionPage = () => {
           </p>
           <div style={s.summaryBox}>
             <p style={s.summaryLine}><strong>Équipement :</strong> {equipement?.nom}</p>
+            {selectedSousEquip && (
+              <p style={s.summaryLine}><strong>Sous-équipement :</strong> {selectedSousEquip.nom}</p>
+            )}
+            {selectedOuvert?.sous_equipement && (
+              <p style={s.summaryLine}><strong>Sous-équipement :</strong> {selectedOuvert.sous_equipement}</p>
+            )}
             <p style={s.summaryLine}><strong>Action :</strong> {selectedOuvert ? 'Clôture' : action}</p>
             <p style={s.summaryLine}><strong>Par :</strong> {user?.prenom} {user?.nom}</p>
           </div>
@@ -373,6 +463,14 @@ const ScanInterventionPage = () => {
           <div style={s.equipBadge}>
             <span style={s.equipId}>#{equipement.id}</span>
             <span style={s.equipNom}>{equipement.nom}</span>
+          </div>
+        )}
+
+        {/* Badge sous-équipement dans le formulaire */}
+        {selectedSousEquip && (
+          <div style={s.sousEquipSelectedBadge}>
+            <span style={s.sousEquipSelectedLabel}>Sous-équipement :</span>
+            <span style={s.sousEquipSelectedNom}>{selectedSousEquip.nom}</span>
           </div>
         )}
 
@@ -493,10 +591,32 @@ const s = {
   equipBadge: {
     display: 'flex', alignItems: 'center', gap: 10,
     background: 'linear-gradient(135deg,#eff6ff,#dbeafe)', border: '1px solid #bfdbfe',
-    borderRadius: 12, padding: '10px 14px', marginBottom: 14,
+    borderRadius: 12, padding: '10px 14px', marginBottom: 10,
   },
   equipId:  { color: '#1e3a8a', fontSize: 20, fontWeight: 900 },
   equipNom: { color: '#1e293b', fontSize: 14, fontWeight: 700 },
+  // Sous-équipement sélection cards
+  sousEquipCard: {
+    width: '100%', background: '#f8fafc', border: '1.5px solid #e2e8f0',
+    borderRadius: 14, padding: '14px 16px', marginBottom: 10,
+    cursor: 'pointer', textAlign: 'left',
+  },
+  sousEquipRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  sousEquipNom: { color: '#0f172a', fontSize: 15, fontWeight: 700 },
+  sousEquipStatut: { fontSize: 12, fontWeight: 600, marginTop: 3 },
+  sousEquipArrow: { color: '#1d4ed8', fontSize: 18, fontWeight: 800 },
+  // Badge sous-équipement sélectionné
+  sousEquipSelectedBadge: {
+    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+    background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
+    padding: '8px 12px', marginBottom: 10,
+  },
+  sousEquipSelectedLabel: { color: '#15803d', fontSize: 12, fontWeight: 700 },
+  sousEquipSelectedNom:   { color: '#166534', fontSize: 13, fontWeight: 800, flex: 1 },
+  changeSousEquipBtn: {
+    padding: '3px 10px', background: '#fff', border: '1px solid #bbf7d0',
+    borderRadius: 8, color: '#15803d', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+  },
   linkedBadge: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
     background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
@@ -516,6 +636,7 @@ const s = {
     borderRadius: 14, padding: '14px 16px', marginBottom: 10,
     cursor: 'pointer', textAlign: 'left',
   },
+  planSousEquip: { color: '#1d4ed8', fontSize: 12, fontWeight: 600, marginTop: 3 },
   badgePlanifie: {
     display: 'inline-block', padding: '2px 8px', background: '#eff6ff',
     color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: 20, fontSize: 11, fontWeight: 700,

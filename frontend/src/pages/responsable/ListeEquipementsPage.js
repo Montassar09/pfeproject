@@ -49,7 +49,7 @@ export default function ListeEquipementsPage() {
 
   useEffect(() => {
     if (!tableRef.current) return;
-    const update = () => setTableH(tableRef.current.offsetHeight);
+    const update = () => { if (tableRef.current) setTableH(tableRef.current.offsetHeight); };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(tableRef.current);

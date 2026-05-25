@@ -113,6 +113,7 @@ app.listen(PORT, async () => {
     await db.query(`ALTER TABLE interventions_staging ADD COLUMN IF NOT EXISTS date_cloture DATE`);
     await db.query(`ALTER TABLE interventions_staging ADD COLUMN IF NOT EXISTS heure_cloture VARCHAR(5)`);
     await db.query(`ALTER TABLE interventions_staging ADD COLUMN IF NOT EXISTS description_cloture TEXT`);
+    await db.query(`ALTER TABLE interventions_staging ADD COLUMN IF NOT EXISTS sous_equipement VARCHAR(255)`);
     console.log('✅ Table interventions_staging prete');
 
     await db.query(`
