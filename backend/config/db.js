@@ -6,9 +6,12 @@ const db = new Pool({
   user:     process.env.DB_USER     || 'postgres',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME     || 'eleonetech_db',
+  ssl: process.env.DB_HOST !== 'localhost' 
+    ? { rejectUnauthorized: false } 
+    : false,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 10000,
 });
 
 module.exports = db;
