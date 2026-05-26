@@ -5,9 +5,9 @@
 import axios from 'axios';
 
 const getBaseURL = () => {
+  if (process.env.REACT_APP_API_URL) return process.env.REACT_APP_API_URL;
   const host = window.location.hostname;
   if (host === 'localhost' || host === '127.0.0.1') return 'http://localhost:5000/api';
-  // même machine sur le réseau local → backend sur le même host port 5000
   return `http://${host}:5000/api`;
 };
 
