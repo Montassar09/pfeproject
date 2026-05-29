@@ -266,7 +266,8 @@ const supprimerUtilisateur = async (req, res) => {
     // exister selon l'installation locale, donc le nettoyage reste tolerant.
     await tryQuery('DELETE FROM token_blacklist WHERE id_user = $1', [req.params.id]);
     await tryQuery('DELETE FROM tokens_reinitialisation WHERE id_user = $1', [req.params.id]);
-    await tryQuery('DELETE FROM audit_log WHERE id_user = $1', [req.params.id]);
+    // Conserver les logs d'audit : on anonymise la référence plutôt que de supprimer
+    await tryQuery('UPDATE audit_log SET id_user = NULL WHERE id_user = $1', [req.params.id]);
     
     const result = await db.query('DELETE FROM utilisateurs WHERE id = $1 RETURNING id', [req.params.id]);
     

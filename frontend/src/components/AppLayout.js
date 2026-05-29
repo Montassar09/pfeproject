@@ -2,9 +2,10 @@
 // APP LAYOUT - Sidebar + contenu principal
 // ============================================================
 import React, { useState } from 'react';
-import { NavLink, useNavigate, Outlet } from 'react-router-dom';
+import { NavLink, useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authAPI } from '../api';
+import NotificationBell from './NotificationBell';
 
 const MENUS = {
   Administrateur: [
@@ -45,7 +46,11 @@ const ROLE_COLORS = {
 const AppLayout = () => {
   const { user, logout } = useAuth();
   const navigate          = useNavigate();
+  const location          = useLocation();
   const menuItems         = MENUS[user?.role] || [];
+
+  // Titre de la page courante à partir du menu
+  const currentPage = menuItems.find(m => location.pathname.startsWith(m.path));
 
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ ancien: '', nouveau: '', confirmation: '' });
@@ -140,8 +145,30 @@ const AppLayout = () => {
       </aside>
 
       {/* Contenu principal */}
-      <main className="flex-1 overflow-y-auto relative">
-        <Outlet />
+      <main className="flex-1 overflow-y-auto relative flex flex-col">
+
+        {/* Barre header */}
+        <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-2 text-gray-700">
+            {currentPage && (
+              <>
+                <span className="text-lg">{currentPage.icon}</span>
+                <span className="font-semibold text-sm">{currentPage.label}</span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <div className="text-sm text-gray-500 border-l pl-3">
+              <span className="font-medium text-gray-700">{user?.prenom} {user?.nom}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <div className="flex-1">
+          <Outlet />
+        </div>
 
         {/* Modal Modification Mot de Passe */}
         {showPasswordModal && (

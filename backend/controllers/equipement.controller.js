@@ -8,13 +8,32 @@ const os = require('os');
 
 const getLocalIp = () => {
   const interfaces = os.networkInterfaces();
+
+  // Adaptateurs virtuels à ignorer (VirtualBox, VMware...)
+  const virtualKeywords = ['virtualbox', 'vmware', 'vethernet', 'loopback', 'pseudo', 'virtual', 'vbox'];
+
+  // 1er passage : préférer Wi-Fi / Ethernet réel, ignorer les virtuels
   for (const name of Object.keys(interfaces)) {
+    const lowerName = name.toLowerCase();
+    if (virtualKeywords.some(k => lowerName.includes(k))) continue;
+
     for (const iface of interfaces[name]) {
       if (iface.family === 'IPv4' && !iface.internal) {
+        if (iface.address.startsWith('192.168.56.')) continue; // plage VirtualBox
         return iface.address;
       }
     }
   }
+
+  // 2e passage : fallback — toute IPv4 non-interne hors VirtualBox
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal && !iface.address.startsWith('192.168.56.')) {
+        return iface.address;
+      }
+    }
+  }
+
   return 'localhost';
 };
 

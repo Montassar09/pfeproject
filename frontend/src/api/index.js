@@ -119,6 +119,7 @@ export const monitoringAPI = {
   checkAlertes:            ()              => api.get('/seuils/alertes'),
   getAlertHistory:         ()              => api.get('/seuils/history'),
   sendAlertEmail:          (alertData)     => api.post('/seuils/alert-email', alertData),
+  getNotifications:        ()              => api.get('/seuils/notifications'),
 };
 
 // Verifications quotidiennes endpoints

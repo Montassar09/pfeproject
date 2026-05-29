@@ -1,8 +1,9 @@
 // ============================================================
-// SCAN ELECTRICITE PAGE - Relevé manuel 3 phases
+// SCAN ELECTRICITE PAGE - Login local toujours affiché + Relevé 3 phases
+// Le login local est indépendant de la session globale
 // ============================================================
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { monitoringAPI } from '../../api/index';
 
 const PHASES = [
@@ -12,33 +13,65 @@ const PHASES = [
 ];
 
 const ScanElecPage = () => {
-  const navigate = useNavigate();
-  const today = new Date().toISOString().split('T')[0];
+  const { login } = useAuth(); // on utilise login() mais PAS user (session globale ignorée)
 
-  const [step, setStep] = useState(0);
+  // ── Login LOCAL (toujours null au départ, même si session active) ─
+  const [localUser, setLocalUser]       = useState(null);
+  const [loginForm, setLoginForm]       = useState({ email: '', password: '' });
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginErreur, setLoginErreur]   = useState('');
+
+  // ── Saisie phases ─────────────────────────────────────────
+  const [step, setStep]       = useState(0);
   const [valeurs, setValeurs] = useState(['', '', '']);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [erreur, setErreur] = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [saved, setSaved]     = useState(false);
+  const [erreur, setErreur]   = useState('');
 
+  const today   = new Date().toISOString().split('T')[0];
   const current = PHASES[step];
 
-  function handleValeurChange(val) {
+  // ── Gestion login ─────────────────────────────────────────
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!loginForm.email.trim() || !loginForm.password)
+      return setLoginErreur('Veuillez remplir tous les champs.');
+    setLoginLoading(true);
+    setLoginErreur('');
+    try {
+      const newUser = await login(loginForm.email.trim(), loginForm.password);
+      if (!['Technicien', 'Administrateur', 'Responsable'].includes(newUser.role)) {
+        setLoginErreur('Accès réservé aux techniciens.');
+        setLocalUser(null);
+        return;
+      }
+      setLocalUser(newUser);
+    } catch (err) {
+      setLoginErreur(err.response?.data?.message || 'Identifiants incorrects.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // ── Navigation phases ─────────────────────────────────────
+  const handleValeurChange = (val) => {
     const newValeurs = [...valeurs];
     newValeurs[step] = val;
     setValeurs(newValeurs);
     setErreur('');
-  }
+  };
 
-  function handleNext() {
+  const handleNext = () => {
     if (!valeurs[step]) return setErreur('Veuillez entrer une valeur.');
     setErreur('');
     setStep(step + 1);
-  }
+  };
 
-  async function handleConfirm() {
+  // ── Enregistrement relevé ─────────────────────────────────
+  const handleConfirm = async () => {
     if (!valeurs[2]) return setErreur('Veuillez entrer la valeur.');
     setSaving(true);
+    setErreur('');
     try {
       await monitoringAPI.addElectricityConsumption({
         date_releve: today,
@@ -48,58 +81,128 @@ const ScanElecPage = () => {
       });
       setSaved(true);
     } catch {
-      setErreur('Erreur lors de l\'enregistrement. Réessayez.');
+      setErreur("Erreur lors de l'enregistrement. Réessayez.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  };
+
+  const recommencer = () => {
+    setLocalUser(null);
+    setLoginForm({ email: '', password: '' });
+    setSaved(false);
+    setStep(0);
+    setValeurs(['', '', '']);
+    setErreur('');
+  };
+
+  // ── ÉCRAN : Login (TOUJOURS au départ) ───────────────────
+  if (!localUser) {
+    return (
+      <div style={s.page}>
+        <form onSubmit={handleLogin} style={s.card}>
+          <div style={s.logoWrap}><div style={s.logoBadge}>⚡</div></div>
+          <p style={s.kicker}>ELEONETECH</p>
+          <h1 style={s.title}>Relevé Électricité</h1>
+          <p style={s.muted}>Connectez-vous pour continuer</p>
+
+          {loginErreur && <div style={s.errorBox}>{loginErreur}</div>}
+
+          <label style={s.label}>Adresse e-mail</label>
+          <input
+            type="email"
+            value={loginForm.email}
+            onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+            style={s.input}
+            placeholder="votre@email.com"
+            autoComplete="username"
+            required
+          />
+
+          <label style={s.label}>Mot de passe</label>
+          <input
+            type="password"
+            value={loginForm.password}
+            onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+            style={s.input}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            required
+          />
+
+          <button type="submit" disabled={loginLoading} style={loginLoading ? s.btnDisabled : s.btn}>
+            {loginLoading ? 'Vérification...' : '🔐 Se connecter'}
+          </button>
+        </form>
+      </div>
+    );
   }
 
-  // ── Success screen ───────────────────────────────────────
-  if (saved) return (
-    <div style={styles.container}>
-      <div style={styles.successBox}>
-        <div style={{ fontSize: 64 }}>✅</div>
-        <h2 style={styles.successTitle}>Relevé enregistré !</h2>
-        <p style={styles.successSub}>Compteur électricité — {today}</p>
-        <div style={styles.successValues}>
-          {PHASES.map((p, i) => (
-            <div key={i} style={styles.successRow}>
-              <span style={styles.successLabel}>{p.label}</span>
-              <span style={styles.successNum}>{valeurs[i]} kWh</span>
-            </div>
-          ))}
+  // ── ÉCRAN : Succès ────────────────────────────────────────
+  if (saved) {
+    return (
+      <div style={s.page}>
+        <div style={{ ...s.card, textAlign: 'center' }}>
+          <div style={s.successIcon}>✓</div>
+          <h1 style={s.title}>Relevé enregistré !</h1>
+          <p style={s.muted}>Compteur électricité — {today}</p>
+
+          <div style={s.summaryBox}>
+            <p style={s.summaryLine}><strong>Technicien :</strong> {localUser.prenom} {localUser.nom}</p>
+            <p style={s.summaryLine}><strong>Date :</strong> {today}</p>
+            {PHASES.map((p, i) => (
+              <p key={i} style={s.summaryLine}>
+                <strong>{p.label} :</strong> {valeurs[i]} kWh
+              </p>
+            ))}
+          </div>
+
+          <button onClick={recommencer} style={{ ...s.btn, marginTop: 20, background: '#d97706' }}>
+            Nouveau relevé
+          </button>
         </div>
-        <button onClick={() => navigate('/technicien/dashboard')} style={styles.btnSecondary}>
-          Retour au dashboard
-        </button>
       </div>
-    </div>
-  );
+    );
+  }
 
+  // ── ÉCRAN : Formulaire saisie phases ─────────────────────
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
+    <div style={s.page}>
+      <div style={s.card}>
 
-        {/* Header */}
-        <div style={styles.header}>
-          <span style={{ fontSize: 32 }}>⚡</span>
-          <h1 style={styles.title}>Relevé Électricité</h1>
-          <p style={styles.subtitle}>{today}</p>
+        <div style={s.logoWrap}><div style={s.logoBadge}>⚡</div></div>
+        <p style={s.kicker}>ELEONETECH</p>
+        <h1 style={s.title}>Relevé Électricité</h1>
+        <p style={s.muted}>{today}</p>
+
+        {/* Badge technicien connecté */}
+        <div style={s.userBadge}>
+          <div style={s.userAvatar}>
+            {localUser.prenom[0]}{localUser.nom[0]}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={s.userName}>{localUser.prenom} {localUser.nom}</div>
+            <div style={s.userRole}>{localUser.role}</div>
+          </div>
+          <button onClick={recommencer} style={s.logoutBtn}>
+            Changer
+          </button>
         </div>
 
-        {/* Progress dots */}
-        <div style={styles.progressRow}>
+        {/* Indicateur de progression */}
+        <div style={s.progressRow}>
           {PHASES.map((p, i) => (
-            <div key={i} style={styles.progressItem}>
+            <div key={i} style={s.progressItem}>
               <div style={{
-                ...styles.dot,
-                background: i < step ? '#16a34a' : i === step ? '#1d4ed8' : '#e2e8f0',
+                ...s.dot,
+                background: i < step ? '#16a34a' : i === step ? '#d97706' : '#e2e8f0',
                 color: i <= step ? '#fff' : '#94a3b8',
               }}>
                 {i < step ? '✓' : i + 1}
               </div>
               <span style={{
-                ...styles.dotLabel,
-                color: i === step ? '#1d4ed8' : i < step ? '#16a34a' : '#94a3b8',
+                ...s.dotLabel,
+                color: i === step ? '#d97706' : i < step ? '#16a34a' : '#94a3b8',
                 fontWeight: i === step ? 700 : 400,
               }}>
                 {p.label}
@@ -108,288 +211,157 @@ const ScanElecPage = () => {
           ))}
         </div>
 
-        {/* Error */}
-        {erreur && (
-          <div style={styles.erreurBox}>⚠️ {erreur}</div>
-        )}
-
         {/* Instruction */}
-        <div style={styles.instructionBox}>
-          <p style={styles.instructionTitle}>
-            Attendez le code <strong style={{ color: '#1d4ed8', fontSize: 20 }}>{current.code}</strong> sur le compteur
+        <div style={s.instructionBox}>
+          <p style={s.instructionTitle}>
+            Attendez le code <strong style={{ color: '#d97706', fontSize: 20 }}>{current.code}</strong> sur le compteur
           </p>
-          <p style={styles.instructionSub}>
-            puis entrez la valeur du {current.label}
-          </p>
+          <p style={s.instructionSub}>puis entrez la valeur du {current.label}</p>
         </div>
 
-        {/* Input */}
-        <div style={styles.section}>
-          <label style={styles.label}>
-            Valeur {current.label} (kWh) :
-          </label>
-          <input
-            type="number"
-            value={valeurs[step]}
-            onChange={e => handleValeurChange(e.target.value)}
-            placeholder="ex: 02560.147"
-            style={styles.input}
-            autoFocus
-          />
-        </div>
+        {erreur && <div style={s.errorBox}>{erreur}</div>}
 
-        {/* Next / Confirm */}
+        <label style={s.label}>Valeur {current.label} (kWh) *</label>
+        <input
+          type="number"
+          value={valeurs[step]}
+          onChange={e => handleValeurChange(e.target.value)}
+          placeholder="ex: 02560.147"
+          style={{ ...s.input, fontSize: 28, fontWeight: 700, textAlign: 'center', padding: '18px 14px' }}
+          autoFocus
+          key={step}
+        />
+
         {step < 2 ? (
           <button
             onClick={handleNext}
             disabled={!valeurs[step]}
-            style={!valeurs[step] ? styles.btnDisabled : styles.btnNext}>
+            style={!valeurs[step] ? s.btnDisabled : { ...s.btn, background: '#d97706' }}
+          >
             Suivant → {PHASES[step + 1].label}
           </button>
         ) : (
           <button
             onClick={handleConfirm}
             disabled={saving || !valeurs[2]}
-            style={saving || !valeurs[2] ? styles.btnDisabled : styles.btnConfirm}>
+            style={saving || !valeurs[2] ? s.btnDisabled : s.btn}
+          >
             {saving ? 'Enregistrement...' : '✅ Confirmer et enregistrer'}
           </button>
         )}
 
-        {/* Summary of completed steps */}
+        {/* Résumé phases déjà saisies */}
         {step > 0 && (
-          <div style={styles.summary}>
+          <div style={s.resumeBox}>
             {PHASES.slice(0, step).map((p, i) => (
-              <div key={i} style={styles.summaryItem}>
-                <span style={styles.summaryLabel}>✓ {p.label}</span>
-                <span style={styles.summaryVal}>{valeurs[i]} kWh</span>
+              <div key={i} style={s.resumeItem}>
+                <span style={s.resumeLabel}>✓ {p.label}</span>
+                <span style={s.resumeVal}>{valeurs[i]} kWh</span>
               </div>
             ))}
           </div>
         )}
-
       </div>
     </div>
   );
 };
 
-const styles = {
-  container: {
+// ── Styles ─────────────────────────────────────────────────────
+const s = {
+  page: {
     minHeight: '100vh',
-    background: '#fafafa',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px 16px',
+    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 20,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   card: {
-    background: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 480,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+    width: '100%', maxWidth: 440, background: '#fff', borderRadius: 24,
+    padding: 28, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+    boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 0,
   },
-  header: {
-    textAlign: 'center',
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottom: '1px solid #f1f5f9',
+  logoWrap: { textAlign: 'center', marginBottom: 8 },
+  logoBadge: {
+    width: 56, height: 56, background: '#d97706', borderRadius: '50%',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 26, boxShadow: '0 8px 16px rgba(217,119,6,0.35)',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: '#1e3a5f',
-    margin: '8px 0 4px',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    margin: 0,
-  },
-  progressRow: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: 32,
-    marginBottom: 24,
-  },
-  progressItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    width: 36,
-    height: 36,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 14,
-    fontWeight: 700,
-  },
-  dotLabel: {
-    fontSize: 12,
-  },
-  instructionBox: {
-    background: '#eff6ff',
-    border: '1px solid #bfdbfe',
-    borderRadius: 12,
-    padding: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  instructionTitle: {
-    fontSize: 16,
-    color: '#1e3a5f',
-    margin: '0 0 4px',
-  },
-  instructionSub: {
-    fontSize: 14,
-    color: '#475569',
-    margin: 0,
-  },
-  section: {
-    marginBottom: 20,
-  },
-  label: {
-    display: 'block',
-    fontSize: 15,
-    color: '#475569',
-    marginBottom: 12,
-    fontWeight: 500,
-  },
+  kicker: { margin: '0 0 2px', color: '#d97706', fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', textAlign: 'center' },
+  title:  { margin: '2px 0 4px', color: '#0f172a', fontSize: 24, fontWeight: 800, textAlign: 'center' },
+  muted:  { margin: '0 0 16px', color: '#64748b', fontSize: 13, textAlign: 'center' },
+  label:  { display: 'block', color: '#334155', fontSize: 13, fontWeight: 700, margin: '14px 0 6px' },
   input: {
-    width: '100%',
-    padding: '16px',
-    fontSize: 28,
-    fontWeight: 700,
-    color: '#1e3a5f',
-    border: '2px solid #0ea5e9',
-    borderRadius: 10,
-    textAlign: 'center',
-    boxSizing: 'border-box',
-    outline: 'none',
+    width: '100%', border: '1.5px solid #fde68a', borderRadius: 12,
+    padding: '12px 14px', fontSize: 15, color: '#0f172a',
+    boxSizing: 'border-box', outline: 'none', background: '#fffbeb',
   },
-  btnNext: {
-    width: '100%',
-    padding: '14px',
-    background: '#1d4ed8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'pointer',
+  errorBox: {
+    background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+    borderRadius: 10, padding: 12, fontSize: 14, margin: '8px 0',
   },
-  btnConfirm: {
-    width: '100%',
-    padding: '14px',
-    background: '#16a34a',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'pointer',
+  btn: {
+    width: '100%', marginTop: 16, border: 'none', borderRadius: 14, padding: 14,
+    background: '#16a34a', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer',
   },
   btnDisabled: {
-    width: '100%',
-    padding: '14px',
-    background: '#94a3b8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'not-allowed',
+    width: '100%', marginTop: 16, border: 'none', borderRadius: 14, padding: 14,
+    background: '#94a3b8', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'not-allowed',
   },
-  btnSecondary: {
-    padding: '12px 24px',
-    background: '#1e3a5f',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: 'pointer',
-    marginTop: 16,
+  userBadge: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12,
+    padding: '12px 14px', marginBottom: 12,
   },
-  erreurBox: {
-    padding: 12,
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    borderRadius: 8,
-    color: '#dc2626',
-    fontSize: 14,
-    marginBottom: 16,
+  userAvatar: {
+    width: 40, height: 40, borderRadius: '50%', background: '#d97706',
+    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontWeight: 900, fontSize: 15, flexShrink: 0,
   },
-  summary: {
-    marginTop: 20,
-    padding: 16,
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    borderRadius: 10,
+  userName:  { fontWeight: 800, color: '#0f172a', fontSize: 15 },
+  userRole:  { color: '#64748b', fontSize: 12, fontWeight: 600, marginTop: 2 },
+  logoutBtn: {
+    padding: '5px 12px', background: '#fff', border: '1px solid #fde68a',
+    borderRadius: 8, color: '#d97706', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+    flexShrink: 0,
   },
-  summaryItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '6px 0',
+  progressRow: {
+    display: 'flex', justifyContent: 'center', gap: 32, marginBottom: 16,
+  },
+  progressItem: {
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+  },
+  dot: {
+    width: 36, height: 36, borderRadius: '50%',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 14, fontWeight: 700,
+  },
+  dotLabel: { fontSize: 12 },
+  instructionBox: {
+    background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12,
+    padding: 14, textAlign: 'center', marginBottom: 8,
+  },
+  instructionTitle: { fontSize: 15, color: '#78350f', margin: '0 0 4px' },
+  instructionSub:   { fontSize: 13, color: '#92400e', margin: 0 },
+  resumeBox: {
+    marginTop: 16, padding: 14,
+    background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12,
+  },
+  resumeItem: {
+    display: 'flex', justifyContent: 'space-between', padding: '5px 0',
     borderBottom: '1px solid #dcfce7',
   },
-  summaryLabel: {
-    color: '#16a34a',
-    fontWeight: 600,
-    fontSize: 14,
+  resumeLabel: { color: '#16a34a', fontWeight: 600, fontSize: 13 },
+  resumeVal:   { color: '#0f172a', fontWeight: 700, fontSize: 13 },
+  successIcon: {
+    width: 64, height: 64, margin: '0 auto 12px', borderRadius: '50%',
+    background: '#dcfce7', color: '#15803d', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 28,
   },
-  summaryVal: {
-    color: '#1e3a5f',
-    fontWeight: 700,
-    fontSize: 14,
+  summaryBox: {
+    background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 12,
+    padding: 14, marginTop: 12, textAlign: 'left',
   },
-  successBox: {
-    background: '#fff',
-    borderRadius: 16,
-    padding: 40,
-    textAlign: 'center',
-    maxWidth: 400,
-    width: '100%',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: '#16a34a',
-    margin: '16px 0 8px',
-  },
-  successSub: {
-    color: '#64748b',
-    fontSize: 14,
-    margin: '4px 0 20px',
-  },
-  successValues: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    marginBottom: 16,
-  },
-  successRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: '10px 16px',
-    background: '#f0fdf4',
-    borderRadius: 8,
-  },
-  successLabel: {
-    color: '#475569',
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  successNum: {
-    color: '#1e3a5f',
-    fontSize: 16,
-    fontWeight: 700,
-  },
+  summaryLine: { margin: '4px 0', fontSize: 13, color: '#334155' },
 };
 
 export default ScanElecPage;

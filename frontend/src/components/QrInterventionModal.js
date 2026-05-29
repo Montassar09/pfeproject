@@ -60,7 +60,7 @@ const QrInterventionModal = ({ qrModal, onClose, copied, onCopy }) => {
               <p className="text-[10px] text-emerald-700/90 mt-0.5 leading-relaxed">
                 Ce QR Code contient l'IP locale réelle de votre PC (
                 <span className="font-bold underline">
-                  {qrModal.url.match(/https?:\/\/([^:/]+)/)?.[1] || '192.168.1.22'}
+                  {qrModal.url.match(/https?:\/\/([^:/]+)/)?.[1] || '192.168.1.9'}
                 </span>
                 ). Aucun réglage manuel n'est requis. Scannez directement depuis votre smartphone sur le Wi-Fi local !
               </p>

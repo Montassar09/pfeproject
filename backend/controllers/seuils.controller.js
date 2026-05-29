@@ -7,7 +7,7 @@ const nodemailer = require('nodemailer');
 
 const getSeuils = async (req, res) => {
   try {
-    // Valeurs par défaut - pas besoin de créer la table
+    // Valeurs par defaut - pas besoin de creer la table
     const defaultSeuils = [
       {
         id: 1,
@@ -15,7 +15,7 @@ const getSeuils = async (req, res) => {
         seuil_hiver: 9000,
         seuil_ete: 12000,
         prix_unitaire: 0.200,
-        unite: 'm³'
+        unite: 'm3'
       },
       {
         id: 2,
@@ -26,7 +26,7 @@ const getSeuils = async (req, res) => {
         unite: 'kWh'
       }
     ];
-    
+
     res.json(defaultSeuils);
   } catch (err) {
     console.error('Erreur getSeuils:', err);
@@ -37,9 +37,9 @@ const getSeuils = async (req, res) => {
 const updateSeuils = async (req, res) => {
   try {
     const { seuils } = req.body;
-    
-    // Pas besoin de mettre à jour la base - juste retourner succès
-    res.json({ message: 'Seuils mis à jour avec succès.' });
+
+    // Pas besoin de mettre a jour la base - juste retourner succes
+    res.json({ message: 'Seuils mis a jour avec succes.' });
   } catch (err) {
     console.error('Erreur updateSeuils:', err);
     res.status(500).json({ message: 'Erreur serveur.' });
@@ -49,14 +49,14 @@ const updateSeuils = async (req, res) => {
 const getAlertHistory = async (req, res) => {
   try {
     const result = await db.query(`
-      SELECT id, type_consommation, message, date_alerte, valeur, seuil, depassement, 
-             cout_estime, technicien_id, technicien_nom, commentaire, email_envoye, 
+      SELECT id, type_consommation, message, date_alerte, valeur, seuil, depassement,
+             cout_estime, technicien_id, technicien_nom, commentaire, email_envoye,
              date_email_envoye, email_destinataire, created_at
-      FROM alertes 
-      ORDER BY created_at DESC 
+      FROM alertes
+      ORDER BY created_at DESC
       LIMIT 50
     `);
-    
+
     res.json(result.rows);
   } catch (err) {
     console.error('Erreur getAlertHistory:', err);
@@ -67,53 +67,53 @@ const getAlertHistory = async (req, res) => {
 const checkAlertes = async (req, res) => {
   try {
     const alertes = [];
-    
-    // Valeurs par défaut
+
+    // Valeurs par defaut
     const seuilEau = { seuil_hiver: 9000, seuil_ete: 12000, prix_unitaire: 0.200 };
     const seuilElec = { seuil_hiver: 2300, seuil_ete: 4000, prix_unitaire: 0.700 };
-    
+
     // Get current technician info from token
     const technicienId = req.user?.id || null;
-    const technicienNom = req.user?.nom ? 
-      `${req.user.prenom || ''} ${req.user.nom}`.trim() : 
-      'Technicien';
-    
-    // Vérifier consommation eau - only unsent alerts
+    const technicienNom = req.user?.nom
+      ? `${req.user.prenom || ''} ${req.user.nom}`.trim()
+      : 'Technicien';
+
+    // Verifier consommation eau - only unsent alerts
     try {
       const eauData = await db.query(
         "SELECT date_releve, compteur, CASE WHEN LAG(compteur, 1, compteur) OVER (ORDER BY date_releve) = compteur THEN 0 ELSE compteur - LAG(compteur, 1, compteur) OVER (ORDER BY date_releve) END as consommation_journaliere FROM consommation_eau ORDER BY date_releve DESC LIMIT 30"
       );
-      
+
       if (eauData.rows.length > 0) {
         const derniereConso = eauData.rows[0];
         const saisonActuelle = new Date().getMonth() >= 11 || new Date().getMonth() <= 3 ? 'hiver' : 'ete';
         const seuilActuel = saisonActuelle === 'hiver' ? seuilEau.seuil_hiver : seuilEau.seuil_ete;
-        
+
         if (derniereConso.consommation_journaliere > seuilActuel) {
           const alerteData = {
             type: 'eau',
-            message: `Consommation eau élevée: ${derniereConso.consommation_journaliere} m³ (seuil: ${seuilActuel} m³)`,
+            message: `Consommation eau elevee: ${derniereConso.consommation_journaliere} m3 (seuil: ${seuilActuel} m3)`,
             date: derniereConso.date_releve,
             valeur: derniereConso.consommation_journaliere,
             seuil: seuilActuel,
             depassement: derniereConso.consommation_journaliere - seuilActuel,
             cout_estime: (derniereConso.consommation_journaliere - seuilActuel) * seuilEau.prix_unitaire
           };
-          
+
           // Check if this alert was already sent
           const existingAlert = await db.query(
             'SELECT id FROM alertes WHERE type_consommation = $1 AND date_alerte = $2 AND email_envoye = TRUE',
             [alerteData.type, alerteData.date]
           );
-          
+
           if (existingAlert.rows.length === 0) {
             alertes.push(alerteData);
-            
+
             // Store alert in database
             try {
               await db.query(`
-                INSERT INTO alertes 
-                (type_consommation, message, date_alerte, valeur, seuil, depassement, 
+                INSERT INTO alertes
+                (type_consommation, message, date_alerte, valeur, seuil, depassement,
                  cout_estime, technicien_id, technicien_nom, commentaire, email_envoye)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE)
               `, [
@@ -126,57 +126,57 @@ const checkAlertes = async (req, res) => {
                 alerteData.cout_estime,
                 technicienId,
                 technicienNom,
-                'Alerte générée automatiquement'
+                'Alerte generee automatiquement'
               ]);
-              console.log('Alerte eau stockée en base de données (non envoyée)');
+              console.log('Alerte eau stockee en base de donnees (non envoyee)');
             } catch (dbErr) {
               console.error('Erreur stockage alerte eau:', dbErr.message);
             }
           } else {
-            console.log('Alerte eau déjà envoyée, ignorée');
+            console.log('Alerte eau deja envoyee, ignoree');
           }
         }
       }
     } catch (err) {
       console.log('Table consommation_eau non disponible:', err.message);
     }
-    
-    // Vérifier consommation électricité - only unsent alerts
+
+    // Verifier consommation electricite - only unsent alerts
     try {
       const elecData = await db.query(
         'SELECT date_releve, consommation_jour FROM consommation_electricite ORDER BY date_releve DESC LIMIT 30'
       );
-      
+
       if (elecData.rows.length > 0) {
         const derniereConso = elecData.rows[0];
         const saisonActuelle = new Date().getMonth() >= 11 || new Date().getMonth() <= 3 ? 'hiver' : 'ete';
         const seuilActuel = saisonActuelle === 'hiver' ? seuilElec.seuil_hiver : seuilElec.seuil_ete;
-        
+
         if (derniereConso.consommation_jour > seuilActuel) {
           const alerteData = {
             type: 'electricite',
-            message: `Consommation électricité élevée: ${derniereConso.consommation_jour} kWh (seuil: ${seuilActuel} kWh)`,
+            message: `Consommation electricite elevee: ${derniereConso.consommation_jour} kWh (seuil: ${seuilActuel} kWh)`,
             date: derniereConso.date_releve,
             valeur: derniereConso.consommation_jour,
             seuil: seuilActuel,
             depassement: derniereConso.consommation_jour - seuilActuel,
             cout_estime: (derniereConso.consommation_jour - seuilActuel) * seuilElec.prix_unitaire
           };
-          
+
           // Check if this alert was already sent
           const existingAlert = await db.query(
             'SELECT id FROM alertes WHERE type_consommation = $1 AND date_alerte = $2 AND email_envoye = TRUE',
             [alerteData.type, alerteData.date]
           );
-          
+
           if (existingAlert.rows.length === 0) {
             alertes.push(alerteData);
-            
+
             // Store alert in database
             try {
               await db.query(`
-                INSERT INTO alertes 
-                (type_consommation, message, date_alerte, valeur, seuil, depassement, 
+                INSERT INTO alertes
+                (type_consommation, message, date_alerte, valeur, seuil, depassement,
                  cout_estime, technicien_id, technicien_nom, commentaire, email_envoye)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE)
               `, [
@@ -189,22 +189,22 @@ const checkAlertes = async (req, res) => {
                 alerteData.cout_estime,
                 technicienId,
                 technicienNom,
-                'Alerte générée automatiquement'
+                'Alerte generee automatiquement'
               ]);
-              console.log('Alerte électricité stockée en base de données (non envoyée)');
+              console.log('Alerte electricite stockee en base de donnees (non envoyee)');
             } catch (dbErr) {
-              console.error('Erreur stockage alerte électricité:', dbErr.message);
+              console.error('Erreur stockage alerte electricite:', dbErr.message);
             }
           } else {
-            console.log('Alerte électricité déjà envoyée, ignorée');
+            console.log('Alerte electricite deja envoyee, ignoree');
           }
         }
       }
     } catch (err) {
       console.log('Table consommation_electricite non disponible:', err.message);
     }
-    
-    res.json({ 
+
+    res.json({
       alertes: alertes,
       currentUser: {
         id: req.user?.id,
@@ -221,14 +221,14 @@ const checkAlertes = async (req, res) => {
 
 const sendAlertEmail = async (req, res) => {
   try {
-    console.log('sendAlertEmail appelé avec:', req.body);
+    console.log('sendAlertEmail appele avec:', req.body);
     const { email, alerts, timestamp, technicianName, comment } = req.body;
 
     if (!email || !alerts || !Array.isArray(alerts)) {
-      return res.status(400).json({ message: 'Données invalides.' });
+      return res.status(400).json({ message: 'Donnees invalides.' });
     }
 
-    // ✅ Fixed transporter
+    // Fixed transporter
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
@@ -241,62 +241,144 @@ const sendAlertEmail = async (req, res) => {
 
     // Format alert details
     const alertDetails = alerts.map(alert =>
-      `Type: ${alert.type === 'eau' ? 'Eau' : 'Électricité'}<br/>
+      `Type: ${alert.type === 'eau' ? 'Eau' : 'Electricite'}<br/>
        Message: ${alert.message}<br/>
        Date: ${new Date(alert.date).toLocaleDateString('fr-FR')}<br/>
-       Dépassement: ${alert.depassement.toFixed(2)} ${alert.type === 'eau' ? 'm³' : 'kWh'}<br/>
-       Coût estimé: ${alert.cout_estime.toFixed(2)} DT`
+       Depassement: ${alert.depassement.toFixed(2)} ${alert.type === 'eau' ? 'm3' : 'kWh'}<br/>
+       Cout estime: ${alert.cout_estime.toFixed(2)} DT`
     ).join('<br/><hr/>');
 
     const mailOptions = {
-      from: `"ELEONETECH Alertes" <${process.env.EMAIL_USER}>`, // ✅ display name
+      from: `"ELEONETECH Alertes" <${process.env.EMAIL_USER}>`, // display name
       to: email,
-      subject: `⚠️ ELEONETECH - ${alerts.length} alerte(s) détectée(s)`,
+      subject: `ELEONETECH - ${alerts.length} alerte(s) detectee(s)`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b;">
-            <h2 style="color: #f59e0b; margin: 0 0 10px 0;">⚠️ Alerte ELEONETECH</h2>
-            <p>${alerts.length} alerte(s) détectée(s) dans le système de monitoring.</p>
+            <h2 style="color: #f59e0b; margin: 0 0 10px 0;">Alerte ELEONETECH</h2>
+            <p>${alerts.length} alerte(s) detectee(s) dans le systeme de monitoring.</p>
             <p style="color: #666; font-size: 14px;">Date: ${new Date(timestamp).toLocaleString('fr-FR')}</p>
             ${technicianName ? `<p style="color: #666; font-size: 14px;">Technicien: ${technicianName}</p>` : ''}
             ${comment ? `<p style="color: #666; font-size: 14px;">Commentaire: ${comment}</p>` : ''}
           </div>
           <div style="background: white; padding: 20px; border-radius: 8px; margin-top: 20px; border: 1px solid #dee2e6;">
-            <h3 style="color: #495057;">Détails des alertes:</h3>
+            <h3 style="color: #495057;">Details des alertes:</h3>
             <p>${alertDetails}</p>
           </div>
           <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
-            <p>Message généré automatiquement par ELEONETECH.</p>
+            <p>Message genere automatiquement par ELEONETECH.</p>
           </div>
         </div>
       `,
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Email envoyé:', result.messageId);
+    console.log('Email envoye:', result.messageId);
 
     // Mark alerts as email sent in database with custom comment
     try {
       await db.query(`
-        UPDATE alertes 
-        SET email_envoye = TRUE, 
+        UPDATE alertes
+        SET email_envoye = TRUE,
             date_email_envoye = CURRENT_TIMESTAMP,
             email_destinataire = $1,
             commentaire = $2
-        WHERE email_envoye = FALSE 
+        WHERE email_envoye = FALSE
         AND type_consommation = ANY($3)
-      `, [email, comment || 'Alerte générée automatiquement', alerts.map(alert => alert.type)]);
-      console.log('Alertes marquées comme email envoyé avec commentaire en base de données');
+      `, [email, comment || 'Alerte generee automatiquement', alerts.map(alert => alert.type)]);
+      console.log('Alertes marquees comme email envoye avec commentaire en base de donnees');
     } catch (dbErr) {
-      console.error('Erreur mise à jour statut email:', dbErr.message);
+      console.error('Erreur mise a jour statut email:', dbErr.message);
     }
 
-    res.json({ message: 'Email envoyé avec succès', alertCount: alerts.length });
-
+    res.json({ message: 'Email envoye avec succes', alertCount: alerts.length });
   } catch (err) {
-    console.error('❌ Erreur sendAlertEmail:', err.message);
+    console.error('Erreur sendAlertEmail:', err.message);
     res.status(500).json({ message: 'Erreur envoi email.', error: err.message });
   }
+};
+
+// ── GET /api/seuils/notifications ────────────────────────
+const getNotifications = async (req, res) => {
+  const items = [];
+
+  // 1. Alertes seuil non encore envoyees par email
+  try {
+    const alertes = await db.query(`
+      SELECT id, type_consommation, message, date_alerte, valeur, seuil, depassement
+      FROM alertes
+      WHERE email_envoye = false OR email_envoye IS NULL
+      ORDER BY date_alerte DESC
+      LIMIT 10
+    `);
+    for (const a of alertes.rows) {
+      items.push({
+        id:       `alerte-${a.id}`,
+        type:     'alerte',
+        icon:     a.type_consommation === 'eau' ? 'eau' : 'electricite',
+        message:  a.message,
+        date:     a.date_alerte,
+        severity: parseFloat(a.depassement) > 20 ? 'danger' : 'warning',
+        link_admin:      '/admin/monitoring',
+        link_technicien: '/technicien/seuils',
+        link_responsable: '/responsable/energie',
+      });
+    }
+  } catch (_) {}
+
+  // 2. Fiches terrain en attente de validation
+  try {
+    const staging = await db.query(`
+      SELECT id, type_intervention, technicien, equipement, created_at
+      FROM interventions_staging
+      WHERE statut = 'En attente'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+    for (const s of staging.rows) {
+      items.push({
+        id:       `staging-${s.id}`,
+        type:     'intervention',
+        icon:     'intervention',
+        message:  `Fiche terrain en attente - ${s.technicien}${s.equipement ? ` (${s.equipement})` : ''}`,
+        date:     s.created_at,
+        severity: 'info',
+        link_admin:      '/admin/interventions-terrain',
+        link_technicien: '/technicien/interventions',
+        link_responsable: '/responsable/interventions-terrain',
+      });
+    }
+  } catch (_) {}
+
+  // 3. Interventions planifiees dans les 3 prochains jours
+  try {
+    const planifiees = await db.query(`
+      SELECT id, date_intervention, type_intervention, description
+      FROM interventions
+      WHERE statut IN ('Planifiee', 'En cours')
+        AND date_intervention BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '3 days'
+      ORDER BY date_intervention ASC
+      LIMIT 5
+    `);
+    for (const p of planifiees.rows) {
+      const desc = (p.description || '').split(' | ')[0].replace('Equipement: ', '');
+      items.push({
+        id:       `planifiee-${p.id}`,
+        type:     'planifiee',
+        icon:     'planning',
+        message:  `Intervention planifiee le ${new Date(p.date_intervention).toLocaleDateString('fr-FR')}${desc ? ` - ${desc}` : ''}`,
+        date:     p.date_intervention,
+        severity: 'info',
+        link_admin:      '/admin/monitoring',
+        link_technicien: '/technicien/interventions',
+        link_responsable: '/responsable/interventions',
+      });
+    }
+  } catch (_) {}
+
+  items.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  res.json({ total: items.length, items: items.slice(0, 15) });
 };
 
 module.exports = {
@@ -304,5 +386,6 @@ module.exports = {
   updateSeuils,
   checkAlertes,
   sendAlertEmail,
-  getAlertHistory
+  getAlertHistory,
+  getNotifications,
 };

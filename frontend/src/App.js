@@ -127,17 +127,9 @@ function App() {
             <Route path="dashboard" element={<Dashboard titre="Tableau de bord Lecteur" icone="👁️" />} />
           </Route>
 
-          {/* ── Routes Scan QR ───────────────────────────── */}
-          <Route path="/scan/eau" element={
-            <PrivateRoute roles={['Technicien', 'Administrateur']}>
-              <ScanEauPage />
-            </PrivateRoute>
-          } />
-          <Route path="/scan/electricite" element={
-            <PrivateRoute roles={['Technicien', 'Administrateur']}>
-              <ScanElectricitePage />
-            </PrivateRoute>
-          } />
+          {/* ── Routes Scan QR (publiques — login intégré dans la page) ── */}
+          <Route path="/scan/eau"          element={<ScanEauPage />} />
+          <Route path="/scan/electricite"  element={<ScanElectricitePage />} />
           <Route path="/scan/intervention/:equipementId" element={<ScanInterventionPage />} />
           <Route path="/intervention/nouveau"            element={<InterventionPubliquePage />} />
 

@@ -5,13 +5,17 @@ import React, { useState, useEffect } from 'react';
 import { usersAPI } from '../../api';
 
 const ACTION_COLORS = {
-  LOGIN:           'bg-green-100 text-green-700',
-  LOGOUT:          'bg-gray-100 text-gray-600',
-  CREATE_USER:     'bg-blue-100 text-blue-700',
-  UPDATE_USER:     'bg-yellow-100 text-yellow-700',
-  DEACTIVATE_USER: 'bg-orange-100 text-orange-700',
-  FORCE_LOGOUT:    'bg-red-100 text-red-700',
-  RESET_PASSWORD:  'bg-purple-100 text-purple-700',
+  LOGIN:             'bg-green-100 text-green-700',
+  LOGOUT:            'bg-gray-100 text-gray-600',
+  CREATE_USER:       'bg-blue-100 text-blue-700',
+  UPDATE_USER:       'bg-yellow-100 text-yellow-700',
+  DELETE_USER:       'bg-red-100 text-red-700',
+  DEACTIVATE_USER:   'bg-orange-100 text-orange-700',
+  FORCE_LOGOUT:      'bg-red-100 text-red-700',
+  RESET_PASSWORD:    'bg-purple-100 text-purple-700',
+  CREATE_EQUIPEMENT: 'bg-blue-100 text-blue-700',
+  UPDATE_EQUIPEMENT: 'bg-yellow-100 text-yellow-700',
+  DELETE_EQUIPEMENT: 'bg-red-100 text-red-700',
 };
 
 const AuditLogPage = () => {
@@ -97,8 +101,17 @@ const AuditLogPage = () => {
                     {log.timestamp ? new Date(log.timestamp).toLocaleString('fr-FR') : '—'}
                   </td>
                   <td className="px-5 py-3">
-                    <div className="font-medium text-gray-900">{log.prenom} {log.nom}</div>
-                    <div className="text-xs text-gray-400">{log.user_email}</div>
+                    {log.prenom || log.nom ? (
+                      <>
+                        <div className="font-medium text-gray-900">{log.prenom} {log.nom}</div>
+                        <div className="text-xs text-gray-400">{log.user_email}</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="font-medium text-gray-400 italic">[Utilisateur supprimé]</div>
+                        <div className="text-xs text-gray-300">ID: {log.id_user ?? '—'}</div>
+                      </>
+                    )}
                   </td>
                   <td className="px-5 py-3">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${ACTION_COLORS[log.action] || 'bg-gray-100 text-gray-600'}`}>

@@ -5,9 +5,8 @@
 // ============================================================
 import React, { useState, useEffect } from 'react';
 
-const BASE_URL = (window.location.hostname === 'localhost' || window.location.hostname === '192.168.1.22')
-  ? 'http://192.168.1.22:5000'
-  : 'https://determining-jewellery-prefix-ambient.trycloudflare.com';
+// Utilise toujours le même host que le frontend, port 5000 pour le backend
+const BASE_URL = `http://${window.location.hostname}:5000`;
 
 const api = (path, body) =>
   fetch(`${BASE_URL}${path}`, {

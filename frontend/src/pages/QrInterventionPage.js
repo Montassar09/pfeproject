@@ -6,7 +6,7 @@ import React, { useEffect, useState } from 'react';
 import { monitoringAPI } from '../api';
 
 const QrInterventionPage = () => {
-  const [ip, setIp]           = useState('192.168.1.22');
+  const [ip, setIp]           = useState('192.168.1.9');
   const [port, setPort]       = useState('3000');
   const [qrData, setQrData]   = useState(null);
   const [loading, setLoading] = useState(true);

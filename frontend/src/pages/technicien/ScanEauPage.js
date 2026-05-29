@@ -1,217 +1,259 @@
 // ============================================================
-// SCAN EAU PAGE - Relevé manuel compteur eau
+// SCAN EAU PAGE - Login local toujours affiché + Relevé eau
+// Le login local est indépendant de la session globale
 // ============================================================
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { monitoringAPI } from '../../api/index';
 
 const ScanEauPage = () => {
-  const navigate = useNavigate();
+  const { login } = useAuth(); // on utilise login() mais PAS user (session globale ignorée)
+
+  // ── Login LOCAL (toujours null au départ, même si session active) ─
+  const [localUser, setLocalUser]       = useState(null);
+  const [loginForm, setLoginForm]       = useState({ email: '', password: '' });
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginErreur, setLoginErreur]   = useState('');
+
+  // ── Relevé ────────────────────────────────────────────────
   const [valeur, setValeur] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved]   = useState(false);
   const [erreur, setErreur] = useState('');
 
   const today = new Date().toISOString().split('T')[0];
 
-  async function handleConfirm() {
+  // ── Gestion login ─────────────────────────────────────────
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!loginForm.email.trim() || !loginForm.password)
+      return setLoginErreur('Veuillez remplir tous les champs.');
+    setLoginLoading(true);
+    setLoginErreur('');
+    try {
+      const newUser = await login(loginForm.email.trim(), loginForm.password);
+      // Vérifier que c'est bien un technicien ou administrateur
+      if (!['Technicien', 'Administrateur', 'Responsable'].includes(newUser.role)) {
+        setLoginErreur('Accès réservé aux techniciens.');
+        setLocalUser(null);
+        return;
+      }
+      setLocalUser(newUser); // session locale uniquement
+    } catch (err) {
+      setLoginErreur(err.response?.data?.message || 'Identifiants incorrects.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // ── Enregistrement relevé ─────────────────────────────────
+  const handleConfirm = async () => {
     if (!valeur) return setErreur('Veuillez entrer une valeur.');
     setSaving(true);
+    setErreur('');
     try {
       await monitoringAPI.addWaterConsumption({
         date_releve: today,
-        compteur: parseFloat(valeur)
+        compteur: parseFloat(valeur),
       });
       setSaved(true);
     } catch {
-      setErreur('Erreur lors de l\'enregistrement. Réessayez.');
+      setErreur("Erreur lors de l'enregistrement. Réessayez.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
+  };
+
+  const recommencer = () => {
+    // Retour au login pour un nouveau relevé (un autre technicien peut scanner)
+    setLocalUser(null);
+    setLoginForm({ email: '', password: '' });
+    setSaved(false);
+    setValeur('');
+    setErreur('');
+  };
+
+  // ── ÉCRAN : Login (TOUJOURS au départ) ───────────────────
+  if (!localUser) {
+    return (
+      <div style={s.page}>
+        <form onSubmit={handleLogin} style={s.card}>
+          <div style={s.logoWrap}><div style={s.logoBadge}>💧</div></div>
+          <p style={s.kicker}>ELEONETECH</p>
+          <h1 style={s.title}>Relevé Eau</h1>
+          <p style={s.muted}>Connectez-vous pour continuer</p>
+
+          {loginErreur && <div style={s.errorBox}>{loginErreur}</div>}
+
+          <label style={s.label}>Adresse e-mail</label>
+          <input
+            type="email"
+            value={loginForm.email}
+            onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+            style={s.input}
+            placeholder="votre@email.com"
+            autoComplete="username"
+            required
+          />
+
+          <label style={s.label}>Mot de passe</label>
+          <input
+            type="password"
+            value={loginForm.password}
+            onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+            style={s.input}
+            placeholder="••••••••"
+            autoComplete="current-password"
+            required
+          />
+
+          <button type="submit" disabled={loginLoading} style={loginLoading ? s.btnDisabled : s.btn}>
+            {loginLoading ? 'Vérification...' : '🔐 Se connecter'}
+          </button>
+        </form>
+      </div>
+    );
   }
 
-  // ── Success screen ───────────────────────────────────────
-  if (saved) return (
-    <div style={styles.container}>
-      <div style={styles.successBox}>
-        <div style={{ fontSize: 64 }}>✅</div>
-        <h2 style={styles.successTitle}>Relevé enregistré !</h2>
-        <p style={styles.successSub}>Compteur eau — {today}</p>
-        <p style={styles.successValue}>{valeur} m³</p>
-        <button onClick={() => navigate('/technicien/dashboard')} style={styles.btnSecondary}>
-          Retour au dashboard
-        </button>
+  // ── ÉCRAN : Succès ────────────────────────────────────────
+  if (saved) {
+    return (
+      <div style={s.page}>
+        <div style={{ ...s.card, textAlign: 'center' }}>
+          <div style={s.successIcon}>✓</div>
+          <h1 style={s.title}>Relevé enregistré !</h1>
+          <p style={s.muted}>Compteur eau — {today}</p>
+
+          <div style={s.summaryBox}>
+            <p style={s.summaryLine}><strong>Technicien :</strong> {localUser.prenom} {localUser.nom}</p>
+            <p style={s.summaryLine}><strong>Date :</strong> {today}</p>
+            <p style={s.summaryLine}><strong>Valeur :</strong> {valeur} m³</p>
+          </div>
+
+          <button onClick={recommencer} style={{ ...s.btn, marginTop: 20, background: '#0284c7' }}>
+            Nouveau relevé
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
+  // ── ÉCRAN : Formulaire relevé ─────────────────────────────
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
+    <div style={s.page}>
+      <div style={s.card}>
 
-        {/* Header */}
-        <div style={styles.header}>
-          <span style={{ fontSize: 32 }}>💧</span>
-          <h1 style={styles.title}>Relevé Compteur Eau</h1>
-          <p style={styles.subtitle}>{today}</p>
+        <div style={s.logoWrap}><div style={s.logoBadge}>💧</div></div>
+        <p style={s.kicker}>ELEONETECH</p>
+        <h1 style={s.title}>Relevé Compteur Eau</h1>
+        <p style={s.muted}>{today}</p>
+
+        {/* Badge technicien connecté */}
+        <div style={s.userBadge}>
+          <div style={s.userAvatar}>
+            {localUser.prenom[0]}{localUser.nom[0]}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={s.userName}>{localUser.prenom} {localUser.nom}</div>
+            <div style={s.userRole}>{localUser.role}</div>
+          </div>
+          <button onClick={recommencer} style={s.logoutBtn}>
+            Changer
+          </button>
         </div>
 
-        {/* Error */}
-        {erreur && (
-          <div style={styles.erreurBox}>⚠️ {erreur}</div>
-        )}
+        {erreur && <div style={s.errorBox}>{erreur}</div>}
 
-        {/* Input */}
-        <div style={styles.section}>
-          <label style={styles.label}>
-            Entrez la valeur du compteur (m³) :
-          </label>
-          <input
-            type="number"
-            value={valeur}
-            onChange={e => { setValeur(e.target.value); setErreur(''); }}
-            placeholder="ex: 3022.00"
-            style={styles.input}
-            autoFocus
-          />
-        </div>
+        <label style={s.label}>Valeur du compteur (m³) *</label>
+        <input
+          type="number"
+          value={valeur}
+          onChange={e => { setValeur(e.target.value); setErreur(''); }}
+          placeholder="ex: 3022.000"
+          style={{ ...s.input, fontSize: 28, fontWeight: 700, textAlign: 'center', padding: '18px 14px' }}
+          autoFocus
+        />
 
-        {/* Confirm button */}
         <button
           onClick={handleConfirm}
           disabled={saving || !valeur}
-          style={!valeur || saving ? styles.btnDisabled : styles.btnConfirm}>
+          style={saving || !valeur ? s.btnDisabled : { ...s.btn, background: '#0284c7' }}
+        >
           {saving ? 'Enregistrement...' : '✅ Confirmer et enregistrer'}
         </button>
-
       </div>
     </div>
   );
 };
 
-const styles = {
-  container: {
+// ── Styles ─────────────────────────────────────────────────────
+const s = {
+  page: {
     minHeight: '100vh',
-    background: '#f0f9ff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px 16px',
+    background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 20,
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   },
   card: {
-    background: '#ffffff',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
-    maxWidth: 480,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+    width: '100%', maxWidth: 440, background: '#fff', borderRadius: 24,
+    padding: 28, boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
+    boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 0,
   },
-  header: {
-    textAlign: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
-    borderBottom: '1px solid #e0f2fe',
+  logoWrap: { textAlign: 'center', marginBottom: 8 },
+  logoBadge: {
+    width: 56, height: 56, background: '#0284c7', borderRadius: '50%',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 26, boxShadow: '0 8px 16px rgba(2,132,199,0.35)',
   },
-  title: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: '#1e3a5f',
-    margin: '8px 0 4px',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    margin: 0,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  label: {
-    display: 'block',
-    fontSize: 15,
-    color: '#475569',
-    marginBottom: 12,
-    fontWeight: 500,
-  },
+  kicker: { margin: '0 0 2px', color: '#0284c7', fontSize: 11, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', textAlign: 'center' },
+  title:  { margin: '2px 0 4px', color: '#0f172a', fontSize: 24, fontWeight: 800, textAlign: 'center' },
+  muted:  { margin: '0 0 16px', color: '#64748b', fontSize: 13, textAlign: 'center' },
+  label:  { display: 'block', color: '#334155', fontSize: 13, fontWeight: 700, margin: '14px 0 6px' },
   input: {
-    width: '100%',
-    padding: '16px',
-    fontSize: 28,
-    fontWeight: 700,
-    color: '#1e3a5f',
-    border: '2px solid #0ea5e9',
-    borderRadius: 10,
-    textAlign: 'center',
-    boxSizing: 'border-box',
-    outline: 'none',
+    width: '100%', border: '1.5px solid #bae6fd', borderRadius: 12,
+    padding: '12px 14px', fontSize: 15, color: '#0f172a',
+    boxSizing: 'border-box', outline: 'none', background: '#f0f9ff',
   },
-  btnConfirm: {
-    width: '100%',
-    padding: '14px',
-    background: '#16a34a',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'pointer',
+  errorBox: {
+    background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
+    borderRadius: 10, padding: 12, fontSize: 14, margin: '8px 0',
+  },
+  btn: {
+    width: '100%', marginTop: 16, border: 'none', borderRadius: 14, padding: 14,
+    background: '#16a34a', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer',
   },
   btnDisabled: {
-    width: '100%',
-    padding: '14px',
-    background: '#94a3b8',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 16,
-    fontWeight: 600,
-    cursor: 'not-allowed',
+    width: '100%', marginTop: 16, border: 'none', borderRadius: 14, padding: 14,
+    background: '#94a3b8', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'not-allowed',
   },
-  btnSecondary: {
-    padding: '12px 24px',
-    background: '#1e3a5f',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    fontSize: 15,
-    fontWeight: 600,
-    cursor: 'pointer',
-    marginTop: 16,
+  userBadge: {
+    display: 'flex', alignItems: 'center', gap: 12,
+    background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12,
+    padding: '12px 14px', marginBottom: 8,
   },
-  erreurBox: {
-    padding: 12,
-    background: '#fef2f2',
-    border: '1px solid #fecaca',
-    borderRadius: 8,
-    color: '#dc2626',
-    fontSize: 14,
-    marginBottom: 16,
+  userAvatar: {
+    width: 40, height: 40, borderRadius: '50%', background: '#0284c7',
+    color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    fontWeight: 900, fontSize: 15, flexShrink: 0,
   },
-  successBox: {
-    background: '#fff',
-    borderRadius: 16,
-    padding: 40,
-    textAlign: 'center',
-    maxWidth: 400,
-    width: '100%',
-    boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+  userName:  { fontWeight: 800, color: '#0f172a', fontSize: 15 },
+  userRole:  { color: '#64748b', fontSize: 12, fontWeight: 600, marginTop: 2 },
+  logoutBtn: {
+    padding: '5px 12px', background: '#fff', border: '1px solid #bae6fd',
+    borderRadius: 8, color: '#0284c7', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+    flexShrink: 0,
   },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: '#16a34a',
-    margin: '16px 0 8px',
+  successIcon: {
+    width: 64, height: 64, margin: '0 auto 12px', borderRadius: '50%',
+    background: '#dcfce7', color: '#15803d', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 28,
   },
-  successSub: {
-    color: '#64748b',
-    fontSize: 14,
-    margin: '4px 0',
+  summaryBox: {
+    background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 12,
+    padding: 14, marginTop: 12, textAlign: 'left',
   },
-  successValue: {
-    fontSize: 36,
-    fontWeight: 800,
-    color: '#1e3a5f',
-    margin: '16px 0',
-  },
+  summaryLine: { margin: '4px 0', fontSize: 13, color: '#334155' },
 };
 
 export default ScanEauPage;

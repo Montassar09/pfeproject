@@ -10,7 +10,8 @@ const {
   updateSeuils,
   checkAlertes,
   sendAlertEmail,
-  getAlertHistory
+  getAlertHistory,
+  getNotifications,
 } = require('../controllers/seuils.controller');
 
 // ── Routes ───────────────────────────────────────
@@ -19,5 +20,6 @@ router.put('/', verifierToken, updateSeuils);
 router.get('/alertes', verifierToken, checkAlertes);
 router.get('/history', verifierToken, getAlertHistory);
 router.post('/alert-email', verifierToken, sendAlertEmail);
+router.get('/notifications', verifierToken, getNotifications);
 
 module.exports = router;
